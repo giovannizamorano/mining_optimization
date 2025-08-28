@@ -1,0 +1,17 @@
+# IDE y sistema
+.vscode/
+*.code-workspace
+
+# Salidas y datos grandes
+output/
+debug_summary.csv
+data/
+pit_definitivo.csv
+
+# Repos anidados que NO versionaremos aquí
+vcpkg/
+alg/pseudoflujo/mineflow_py/Ultimate-Pit-Limit---Pseudoflow/
+
+# (agrega aquí lo que no quieras subir)
+alg/LG/debug.log
+*.log

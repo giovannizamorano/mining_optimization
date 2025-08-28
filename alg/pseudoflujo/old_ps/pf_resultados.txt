@@ -1,0 +1,6 @@
+Bloques en pit: 60590
+Valor total: -371733.903
+Tonelaje total: 3103005240.000 t
+Ley promedio Cu: 0.046 %
+Ley promedio Au: 0.044 g/t
+Tiempo de ejecución: 941.018 s
