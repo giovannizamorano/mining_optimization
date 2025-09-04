@@ -13,7 +13,6 @@ vcpkg/
 alg/pseudoflujo/mineflow_py/Ultimate-Pit-Limit---Pseudoflow/
 /mnt/c/users/giova/oneDrive/escritorio/mining/alg/pseudoflujo/old_ps/
 
-build/
 
 # (agrega aquí lo que no quieras subir)
 alg/LG/debug.log
@@ -21,3 +20,4 @@ alg/LG/debug.log
 
 alg/LG/programas_no_necesarios/
 
+build/
