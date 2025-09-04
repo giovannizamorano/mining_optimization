@@ -1,53 +1,5 @@
 /* mineflow.cpp
-Contact: matthewvdeutsch@gmail.com
-You should also have 'mineflow.h', or else you'll have trouble. See that file
-for more information.
-
-Citation:
-@article{deutsch2022mineflow,
-  author={Deutsch, Matthew and Da{\u{g}}delen, Kadri and Johnson, Thys},
-  title={An Open-Source Program for Efficiently Computing Ultimate Pit Limits: MineFlow},
-  journal={Natural Resources Research},
-  year={2022},
-  month={Mar},
-  day={17},
-  issn={1573-8981},
-  doi={10.1007/s11053-022-10035-w},
-  url={https://doi.org/10.1007/s11053-022-10035-w}
-}
-
-This file contains roughly 3 sections:
-
-    - The actual implementation of the library
-    - A testing framework and tests: Access with compile definition: MVD_MINEFLOW_TESTS
-    - The executable: Access with compile definition: MVD_MINEFLOW_EXE
-
-It is not great practice to recompile the same implementation multiple times
-with different #defines to get at what you want, but note that the decision here
-was to optimize for integration, not elegance.
-
-
-LICENSE
--------
-Copyright 2022 Matthew Deutsch
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ */
 
 #include <iomanip>
 #include <functional>
