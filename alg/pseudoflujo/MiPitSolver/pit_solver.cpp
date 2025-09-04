@@ -15,7 +15,7 @@
 
 using namespace std;
 using Cap = long long;
-constexpr int SCALE = 1000;  // coincide con tu escala original
+constexpr int SCALE = 1000;
 
 struct Block {
     int id;

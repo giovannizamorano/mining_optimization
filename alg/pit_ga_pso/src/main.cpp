@@ -121,29 +121,22 @@ int main(int argc, char **argv) {
     auto pred   = load_arcs_json  (argv[1]);
 
     pagmo::problem prob{ PitProblem{blocks, pred} };
-    pagmo::population pop(prob, 60);
 
-    // GA
+    // --- GA con población propia ---
+    pagmo::population pop_ga(prob, 60);
     auto t0 = chrono::steady_clock::now();
-    pagmo::algorithm ga(
-        pagmo::sga(400u, 0.9, 15.0, 0.02, 1.0, 30u)
-    );
-    pop = ga.evolve(pop);
+    pagmo::algorithm ga( pagmo::sga(400u, 0.9, 15.0, 0.02, 1.0, 30u) );
+    pop_ga = ga.evolve(pop_ga);
     auto t1 = chrono::steady_clock::now();
-    write_results("ga", pop,
-                  chrono::duration<double>(t1-t0).count(),
-                  blocks, pred);
+    write_results("ga", pop_ga, chrono::duration<double>(t1-t0).count(), blocks, pred);
 
-    // PSO
+    // --- PSO con población independiente ---
+    pagmo::population pop_pso(prob, 60);
     auto t2 = chrono::steady_clock::now();
-    pagmo::algorithm pso(
-        pagmo::pso(500, 0.72, 1.2, 1.2)
-    );
-    pop = pso.evolve(pop);
+    pagmo::algorithm pso( pagmo::pso(500, 0.72, 1.2, 1.2) );
+    pop_pso = pso.evolve(pop_pso);
     auto t3 = chrono::steady_clock::now();
-    write_results("pso", pop,
-                  chrono::duration<double>(t3-t2).count(),
-                  blocks, pred);
+    write_results("pso", pop_pso, chrono::duration<double>(t3-t2).count(), blocks, pred);
 
     return 0;
 }

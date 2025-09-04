@@ -14,32 +14,29 @@ std::vector<int> perm_from_continuous(const std::vector<double>& x) {
 }
 
 // 2) Calcula el NPV total sumando (value * tonnage) de cada bloque extraído
-double pit_npv(const std::vector<int>& perm,
+double pit_npv(const std::vector<int> & perm,
                const BlockArray& B,
                const ArcAdj& pred) {
     const int n = static_cast<int>(B.size());
     std::vector<bool> in_pit(n, false);
 
-    // Lambda recursiva: marca v y todos sus predecesores
-    std::function<void(int)> mark = [&](int v) {
-        if (in_pit[v]) return;
-        in_pit[v] = true;
+    auto preds_ok = [&](int v){
         auto it = pred.find(v);
-        if (it != pred.end()) {
-            for (int u : it->second) {
-                mark(u);
-            }
+        if (it == pred.end()) return true;   // sin predecesores
+        for (int u : it->second) {
+            if (u <= 0 || u >= n) return false; // id inválido
+            if (!in_pit[u]) return false;       // falta un predecesor
         }
+        return true;
     };
 
-    // Recorre la permutación: extrae solo si value>0
+    // Recorre la permutación: incluye v solo si value>0 y todos sus predecesores ya están
     for (int v : perm) {
-        if (v > 0 && v < n && B[v].value > 0.0) {
-            mark(v);
+        if (v > 0 && v < n && B[v].value > 0.0 && preds_ok(v)) {
+            in_pit[v] = true;
         }
     }
 
-    // Suma el flujo neto total: value_por_tonelada * toneladas
     double npv = 0.0;
     for (int v = 1; v < n; ++v) {
         if (in_pit[v]) {
