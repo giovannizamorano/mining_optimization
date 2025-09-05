@@ -1,27 +1,22 @@
-cmake_minimum_required(VERSION 3.15)
-project(milp)
+cmake_minimum_required(VERSION 3.16)
+project(upl_milp_single_period LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_compile_options(-Wall -Wextra -Wpedantic)
 
-# 1) Indicar el toolchain de vcpkg:
-set(CMAKE_TOOLCHAIN_FILE
-    "C:/Users/Giova/OneDrive/Escritorio/Mining/vcpkg/scripts/buildsystems/vcpkg.cmake"
-    CACHE STRING "Vcpkg toolchain file")
-
-# 2) Encuentra la carpeta de include de mlpack (header-only):
-find_path(MLPACK_INCLUDE_DIRS 
-  NAMES mlpack/core.hpp 
-  HINTS "${_VCPKG_INSTALLED_DIR}/include"
-)
-
-if (NOT MLPACK_INCLUDE_DIRS)
-  message(FATAL_ERROR "No pude encontrar mlpack.hpp. ¿Está instalado?")
+# Requiere GUROBI_HOME configurado
+if(NOT DEFINED ENV{GUROBI_HOME})
+  message(FATAL_ERROR "GUROBI_HOME no definido. Ej.: C:/gurobi1100/win64 o /opt/gurobi1100/linux64")
 endif()
+set(GUROBI_HOME $ENV{GUROBI_HOME})
 
-message(STATUS "mlpack include directory: ${MLPACK_INCLUDE_DIRS}")
+include_directories(${GUROBI_HOME}/include)
+link_directories(${GUROBI_HOME}/lib)
 
-# 3) Tu ejecutable
-add_executable(milp milp_rf.cpp)
+add_executable(upl_milp_single_period src/main.cpp)
 
-# 4) Indica a CMake dónde buscar los headers de mlpack
-target_include_directories(milp PRIVATE ${MLPACK_INCLUDE_DIRS})
+# Nota: en Linux suele ser 'gurobi_c++' y 'gurobi110' (o 'gurobi100', etc.).
+# En Windows, el nombre varía por toolset (p.ej., gurobi_c++md2019). Si falla,
+# ajusta el nombre exacto según los .lib en ${GUROBI_HOME}/lib.
+target_link_libraries(upl_milp_single_period gurobi_c++ gurobi)

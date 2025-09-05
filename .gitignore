@@ -8,7 +8,8 @@ debug_summary.csv
 pit_definitivo.csv
 
 # Repos anidados que NO versionaremos aquí
-resource/
+vcpkg/
+build/
 alg/pseudoflujo/mineflow_py/Ultimate-Pit-Limit---Pseudoflow/
 /mnt/c/users/giova/oneDrive/escritorio/mining/alg/pseudoflujo/old_ps/
 
