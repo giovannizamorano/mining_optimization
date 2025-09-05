@@ -78,58 +78,86 @@ static void buildAdjDir(const vector<Arc>& A,
 
 /* ---------- lectura del archivo ---------- */
 vector<Node>
-readBlocks(const string& file,unordered_map<Key3,int,Key3Hash>& coord2idx, unordered_map<int,int>& id2idx)
+readBlocks(const string& file,
+           unordered_map<Key3,int,Key3Hash>& coord2idx,
+           unordered_map<int,int>& id2idx)
 {
-    std::ifstream f(file);
-    if (!f) { std::cerr << "No pude abrir " << file << '\n'; exit(1); }
+    ifstream f(file);
+    if (!f) { cerr << "No pude abrir " << file << '\n'; exit(1); }
 
-    std::vector<Node> N;
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.empty() || line[0] == '%') continue;      // comentario
+    string line;
+    if (!getline(f, line)) { cerr << "CSV vacío\n"; exit(1); }
 
-        // Split usando espacios, tabs o ':'
-        std::stringstream ss(line);
-        std::string tok;
-        std::vector<std::string> t;
-        while (std::getline(ss, tok, ' '))                 // primer split
-            if (!tok.empty()) t.push_back(tok);
-
-        std::vector<std::string> toks;
-        for (auto& s : t) {
-            size_t pos;
-            while ((pos = s.find(':')) != std::string::npos) {
-                toks.push_back(s.substr(0, pos));
-                s.erase(0, pos + 1);
-            }
-            toks.push_back(s);
-        }
-
-        if (toks.size() < 5) continue; // línea malformada
-
-        int    id = std::stoi(toks[0]);
-        double X  = std::stod(toks[1]);
-        double Y  = std::stod(toks[2]);
-        double Z  = std::stod(toks[3]);
-        double w  = std::stod(toks[9]);
-//        double value_ex   = std::stod(toks[8]);
-//        double value_proc = std::stod(toks[9]);
-//        double w          = value_proc - value_ex;;
-
-/*
-to read marvin web example
-        double tonn = std::stod(toks[4]);
-        double pp   = std::stod(toks[7]);   // proc_profit (US$/t)
-        double w    = (pp - 0.9) * tonn; 
-*/
-        int idx = (int)N.size();
-        id2idx[id]          = idx;
-        coord2idx[{X,Y,Z}]  = idx;
-        N.push_back({w, X, Y, Z});
+    // Quitar BOM UTF-8 si existe
+    if (line.size() >= 3 &&
+        (unsigned char)line[0] == 0xEF &&
+        (unsigned char)line[1] == 0xBB &&
+        (unsigned char)line[2] == 0xBF) {
+      line.erase(0, 3);
     }
+
+    // Helper trim (quita espacios y \r)
+    auto trim = [](string& s){
+      while (!s.empty() && (s.back()=='\r'||s.back()==' '||s.back()=='\t')) s.pop_back();
+      size_t i=0; while (i<s.size() && (s[i]==' '||s[i]=='\t')) ++i;
+      if (i) s.erase(0,i);
+    };
+
+    // --- Cabeceras CSV ---
+    vector<string> cols;
+    {
+      string c; stringstream hs(line);
+      while (getline(hs, c, ',')) { trim(c); cols.push_back(c); }
+    }
+    auto col = [&](const string& name)->int{
+      for (int i=0;i<(int)cols.size();++i) if (cols[i]==name) return i;
+      return -1;
+    };
+    const int cX  = col("X");
+    const int cY  = col("Y");
+    const int cZ  = col("Z");
+    const int cEc = col("Economic");
+
+    if (cX<0 || cY<0 || cZ<0 || cEc<0) {
+      cerr << "Cabeceras esperadas: X,Y,Z,Economic\n";
+      exit(1);
+    }
+
+    vector<Node> N; N.reserve(70000);
+    coord2idx.clear(); id2idx.clear();
+
+    auto getd = [&](const vector<string>& t, int i)->double{
+      if (i<0 || i>=(int)t.size()) return 0.0;
+      try { return stod(t[i]); } catch(...) { return 0.0; }
+    };
+
+    int nextId = 1;
+    while (getline(f, line)) {
+      if (line.empty()) continue;
+      vector<string> t; t.reserve(12);
+      { string tok; stringstream ss(line);
+        while (getline(ss, tok, ',')) { trim(tok); t.push_back(tok); }
+      }
+      if ((int)t.size() <= max(max(cX,cY), max(cZ,cEc))) continue;
+
+      double X = getd(t, cX);
+      double Y = getd(t, cY);
+      double Z = getd(t, cZ);
+      double w = getd(t, cEc);     // valor del bloque = Economic (tal cual)
+
+      // Si prefieres $/bloque (con densidad y paso 30m), descomenta:
+      // const int cDen = col("Density");
+      // if (cDen >= 0) { double Den = getd(t, cDen); w = w * Den * (30.0*30.0*30.0); }
+
+      int idx = (int)N.size();
+      id2idx[nextId++] = idx;      // id sintético secuencial (1..n)
+      coord2idx[{X,Y,Z}] = idx;    // tu Key3 con doubles
+      N.push_back({ w, X, Y, Z }); // ajusta si tu Node tiene más campos
+    }
+
+    cerr << "[INFO] MARVIN_BM leídos: " << N.size() << " bloques\n";
     return N;
 }
-
 
 /* ---------- diferencia mínima positiva ---------- */
 template<class T>
