@@ -25,10 +25,12 @@
 #include <iomanip>
 #include <cmath>
 #include <cstdint>
+#define USE_ITER_ACC 0
 using namespace std;
 
+constexpr double EPS = 1e-9;
 /* =======================   ARISTAS PROCESADAS   ======================= */
-inline uint64_t arcKey(int u,int v){ return ( (uint64_t)u << 32 ) | (uint32_t)v; }
+inline uint64_t arcKey(int u,int v){if (u > v) std::swap(u,v);return ((uint64_t)u<<32) | (uint32_t)v;}
 /* aristas que ya se resolvieron (FORZAR o PODAR) */
 static std::unordered_set<uint64_t> procesadas;
 
@@ -43,7 +45,7 @@ struct Key3Hash{
 
 /* ---------- estructuras ---------- */
 struct Node{double w,x,y,z; };
-struct Arc { int u,v; bool plus=false,strong=false; };
+struct Arc { int u,v; bool plus=false,strong=false; bool is_dummy = false;};
 
 /* ---------- auxiliar: rehacer lista de adyacencia sin realocar ---------- */
 static void buildAdj(const vector<Arc>& A, vector<vector<int>>& adj)
@@ -93,7 +95,6 @@ readBlocks(const string& file,unordered_map<Key3,int,Key3Hash>& coord2idx, unord
         while (std::getline(ss, tok, ' '))                 // primer split
             if (!tok.empty()) t.push_back(tok);
 
-        // Si algunos campos vienen pegados con ':', haz un segundo split
         std::vector<std::string> toks;
         for (auto& s : t) {
             size_t pos;
@@ -111,9 +112,9 @@ readBlocks(const string& file,unordered_map<Key3,int,Key3Hash>& coord2idx, unord
         double Y  = std::stod(toks[2]);
         double Z  = std::stod(toks[3]);
         double w  = std::stod(toks[9]);
-        //double value_ex   = std::stod(toks[8]);
-        //double value_proc = std::stod(toks[9]);
-        //double w          = value_proc - value_ex;;
+//        double value_ex   = std::stod(toks[8]);
+//        double value_proc = std::stod(toks[9]);
+//        double w          = value_proc - value_ex;;
 
 /*
 to read marvin web example
@@ -137,11 +138,44 @@ double minDiff(std::vector<T> v){
     double d = std::numeric_limits<double>::infinity();
     for(size_t i = 1; i < v.size(); ++i){
         double t = v[i] - v[i-1];
-        if (t > 1e-9 && t < d) 
+        if (t > EPS && t < d) 
             d = t;
     }
     return d;
 }
+
+
+void computeAccIterative(const vector<Node>& N,
+                         const vector<vector<int>>& adj,
+                         vector<double>& acc) {
+    int n = (int)N.size() - 1;
+    acc.assign(n+1, 0.0);
+    vector<int> parent(n+1, -1);
+    vector<int> order;
+    order.reserve(n+1);
+
+    // 1) Construye post-order con stack
+    stack<int> st;
+    st.push(0);
+    while (!st.empty()) {
+        int u = st.top(); st.pop();
+        order.push_back(u);
+        for (int v : adj[u]) {
+            if (v == parent[u]) continue;
+            parent[v] = u;
+            st.push(v);
+        }
+    }
+
+    // 2) Suma pesos de abajo hacia arriba
+    for (auto it = order.rbegin(); it != order.rend(); ++it) {
+        int u = *it;
+        acc[u] += N[u].w;
+        if (parent[u] >= 0)
+            acc[parent[u]] += acc[u];
+    }
+}
+
 
 /* ---------- aristas 1-5 ---------- */
 vector<pair<int,int>> arcs1_5( const vector<Node>&N, const unordered_map<Key3,int,Key3Hash>&idx){
@@ -159,23 +193,10 @@ vector<pair<int,int>> arcs1_5( const vector<Node>&N, const unordered_map<Key3,in
     vector<pair<int,int>>E;
     for(size_t id=1; id<N.size(); ++id){
         const auto&b=N[id]; double up=b.z+dz;
-//        Key3 p[9] = {
-//            { b.x - dx, b.y - dy, up },  // esquina NW
-//            { b.x      , b.y - dy, up },  // norte
-//            { b.x + dx, b.y - dy, up },  // esquina NE
-//            { b.x - dx, b.y     , up },  // oeste
-//            { b.x     , b.y     , up },  // centro (directamente arriba)
-//            { b.x + dx, b.y     , up },  // este
-//            { b.x - dx, b.y + dy, up },  // esquina SW
-//            { b.x     , b.y + dy, up },  // sur
-//            { b.x + dx, b.y + dy, up }   // esquina SE
-//        };
 
         Key3 p[5]={{b.x,b.y,up},{b.x-dx,b.y,up},{b.x+dx,b.y,up},
                    {b.x,b.y-dy,up},{b.x,b.y+dy,up}};
-/*
-        Key3 p[1] = { { b.x, b.y, up } };
-*/
+
         for(auto q:p){ 
             auto it=idx.find(q);
                 DBG("Buscando predecesor en ("
@@ -186,7 +207,7 @@ vector<pair<int,int>> arcs1_5( const vector<Node>&N, const unordered_map<Key3,in
     DBG("Arcos 1-5 generados: " << E.size());
     return E;
 }
-
+double computeAccIterative(int root);
 /* ---------- etiquetar---------- */
 void label(const std::vector<Node>& N,
            const std::vector<std::vector<int>>& adj, // Esto es adj_cache desde normalize
@@ -231,42 +252,33 @@ void label(const std::vector<Node>& N,
     /* --- DFS para peso acumulado de cada sub-árbol --- */
     // === INICIO DEL NUEVO BLOQUE DFS RECURSIVO ===
 
-    static std::vector<bool> visited_dfs_acc; 
-    if (visited_dfs_acc.size() != N.size()) { visited_dfs_acc.resize(N.size());}
-    std::fill(visited_dfs_acc.begin(), visited_dfs_acc.end(), false);
+    #if USE_ITER_ACC
+        /* -----------------------------------------------
+        Peso acumulado con la versión ITERATIVA
+        ----------------------------------------------- */
+        computeAccIterative(N, adj, acc);
 
-    // 2. Definir la función lambda recursiva para el DFS.
+    #else
+        /* -----------------------------------------------
+        Peso acumulado con la versión RECURSIVA
+        ----------------------------------------------- */
+        static std::vector<bool> visited_dfs_acc;
+        if (visited_dfs_acc.size() != N.size()) visited_dfs_acc.resize(N.size());
+        std::fill(visited_dfs_acc.begin(), visited_dfs_acc.end(), false);
 
-    std::function<double(int, int)> calculate_subtree_weight_dfs =
-        [&](int u, int p_parent) -> double {
-        visited_dfs_acc[u] = true; // Marcar el nodo actual como visitado
-        double current_sum_weights = N[u].w;
-
-        for (int v_neighbor : adj[u]) {
-            if (v_neighbor == p_parent) continue; // No regresar al padre inmediato
-
-            if (!visited_dfs_acc[v_neighbor]) { // Si el vecino no ha sido visitado
-                current_sum_weights += calculate_subtree_weight_dfs(v_neighbor, u); // Sumar el peso acumulado del subárbol del vecino
-            }
-        }
-        return acc[u] = current_sum_weights;
-    };
+        std::function<double(int, int)> calculate_subtree_weight_dfs =
+            [&](int u, int p_parent) -> double {
+                visited_dfs_acc[u] = true;
+                double sum = N[u].w;
+                for (int v : adj[u])
+                    if (v != p_parent && !visited_dfs_acc[v])
+                        sum += calculate_subtree_weight_dfs(v, u);
+                return acc[u] = sum;
+            };
+        calculate_subtree_weight_dfs(0, -1);
+    #endif
 
     // 3. Llamada inicial al DFS.
-    //    Se asume que el nodo 0 es la raíz del árbol.
-    //    Verifica que N no esté vacío y que el nodo 0 exista antes de llamar.
-    if (!N.empty() && 0 < N.size() && !visited_dfs_acc[0]) { // Asegurar que el nodo 0 es un índice válido
-         calculate_subtree_weight_dfs(0, -1); // Iniciar DFS desde el nodo 0, con -1 como padre ficticio
-    }
-    // Si tu grafo pudiera tener múltiples componentes desconectados y necesitas
-    // calcular 'acc' para todos ellos, o si el nodo 0 no siempre es la raíz:
-    // for (int i = 0; i <= n; ++i) { // Iterar sobre todos los nodos posibles
-    //     // Podrías necesitar una condición para N[i] si algunos índices no son nodos válidos
-    //     if (i < N.size() && !visited_dfs_acc[i]) {
-    //         calculate_subtree_weight_dfs(i, -1);
-    //     }
-    // }
-    // === FIN DEL NUEVO BLOQUE DFS RECURSIVO ===
 
     /* --- imprimir pesos acumulados --- */
     DBG("Acc (peso sub-árbol) de cada nodo:");
@@ -276,9 +288,13 @@ void label(const std::vector<Node>& N,
     /* --- asignar plus/minus y strong/weak--- */
     for (auto& arc_ref : A) {
         arc_ref.plus = (parent[arc_ref.v] == arc_ref.u);
+
         double branch_weight = acc[arc_ref.plus ? arc_ref.v : arc_ref.u];
-        arc_ref.strong = ((arc_ref.plus && branch_weight >0.0) ||
-                          (!arc_ref.plus && branch_weight <=0.0));
+        
+        if (arc_ref.plus)      // dirección “padre → hijo”
+            arc_ref.strong = (branch_weight >= -EPS);   // 0 cuenta como positivo
+        else                   // dirección “hijo → padre”
+            arc_ref.strong = (branch_weight <  -EPS);  
     }
 }
 /************  UTILIDADES DUMMY  +  BACKUP DE ARISTAS  ************/
@@ -296,7 +312,7 @@ void eliminaDummy(std::vector<Arc>& A,int node){
 // Inserta dummy (0 -> node) **solo si** no existe ya
 void addDummy(std::vector<Arc>& A, int node){
     if(posDummy(A,node)==-1)
-        A.push_back({0,node,true,false});
+        A.push_back({0, node, true, false, true});
 }
 
 /* ---------- normalizar (tree-cut) ---------- */
@@ -329,11 +345,11 @@ void normalize(const vector<Node>& N,
         buildAdj(A, adj_cache);
         label(N, adj_cache, A, acc);
 
-        for (size_t i = 0; i < A.size(); ++i) {        
+        for (size_t i = 0; i < A.size();) {        
             const Arc& current_arc = A[i];    
 
             /* Action 1 (strong-minus) — **cortar TODA strong-minus**  */
-            if (current_arc.strong && !current_arc.plus) {   // ← condición corregida (sin acc[u] < 0)
+            if (current_arc.strong && !current_arc.plus && current_arc.is_dummy) {   // ← condición corregida (sin acc[u] < 0)
                 if (main_iter_step >= debug_start_iter) {
                     std::cout << "[DETAILED_DEBUG T" << main_iter_step << " normalize] Action 1 para A[" << i
                             << "]:(" << current_arc.u << "," << current_arc.v << ") strong=" << current_arc.strong
@@ -344,16 +360,15 @@ void normalize(const vector<Node>& N,
                             << "]:(" << current_arc.u << "," << current_arc.v << ")" << std::endl;
                 }
 
-                int q_node = current_arc.u;            // Nodo para el dummy (extremo que apunta a x0)
-                A.erase(A.begin() + i);
+                int q_node = current_arc.u;
+                A.erase(A.begin() + i);    // tras erase, “el siguiente” queda en la MISMA posición i
                 addDummy(A, q_node);
-
                 again = true;
-                break;                                 // El while(again) continuará
+                continue;                                 // El while(again) continuará
             }
 
             /* Action 2 (strong-plus fuera del root) */
-            if (current_arc.strong && current_arc.plus && current_arc.u != 0) {
+            if (current_arc.strong && current_arc.plus && current_arc.u != 0 && current_arc.is_dummy) {
                 if (main_iter_step >= debug_start_iter) {
                     std::cout << "[DETAILED_DEBUG T" << main_iter_step << " normalize] Action 2 para A[" << i
                             << "]:(" << current_arc.u << "," << current_arc.v << ") u=" << current_arc.u
@@ -364,13 +379,14 @@ void normalize(const vector<Node>& N,
                             << "]:(" << current_arc.u << "," << current_arc.v << ")" << std::endl;
                 }
 
-                int v_node = current_arc.v;            // Nodo para el dummy
+                int v_node = current_arc.v;
                 A.erase(A.begin() + i);
                 addDummy(A, v_node);
-
                 again = true;
-                break;                                 // El while(again) continuará
+                continue;                                // El while(again) continuará
             }
+
+            ++i;
         }
 
         // Si 'again' es true, el 'while' continuará. Si es false, saldrá.
@@ -516,11 +532,22 @@ int main(int argc,char*argv[]){
 
     unordered_map<int,int> id2idx;
     unordered_map<Key3,int,Key3Hash> coord2idx;
-    vector<Node> N    = readBlocks(argv[1], coord2idx, id2idx);
+    vector<Node> N = readBlocks(argv[1], coord2idx, id2idx);
     std::cout << "[INFO] Total nodos (N.size()): " << N.size() << std::endl;
+    N.insert(N.begin(), {0.0, 0.0, 0.0, 0.0});
+    /* ─────  desplazar todos los índices +1 ───── */
+    for (auto& kv : id2idx)                   // id  → índice interno
+        kv.second += 1;
+
+    unordered_map<Key3,int,Key3Hash> newCoord;
+    for (auto& kv : coord2idx)                // (X,Y,Z) → índice interno
+        newCoord[kv.first] = kv.second + 1;
+    coord2idx.swap(newCoord);                 // reemplazar el viejo mapa
+
+    /* (opcional) mensaje de control */
+    std::cout << "[INFO] Dummy añadido. N.size()=" << N.size()
+            << ", primer bloque real ahora es N[1]\n";
     DBG("Nodos totales: " << N.size()-1);
-    //version original:
-  //vector<pair<int,int>> feas = arcs1_5(N, idx);
 
     //version que lee precedencias de archivo:
         vector<pair<int,int>> feas;
@@ -542,8 +569,6 @@ int main(int argc,char*argv[]){
     for(size_t i=1;i<N.size();++i) A.push_back({0,(int)i,true,false});
     vector<double> acc; // Usando 'acc' como en tu código original
 
-    // Definir un 'step' conceptual para la fase T0 si es necesario para los logs dentro de normalize.
-    // O simplemente pasar valores que desactiven los logs detallados para esta llamada.
     int step_for_T0 = 0; // O cualquier valor que sepas que es < DETAILED_DEBUG_START_ITERATION
 
     // Llamada actualizada:
@@ -554,15 +579,9 @@ int main(int argc,char*argv[]){
     for(int i = 0; i < min(5, (int)A.size()); ++i)
         DBG("  A["<<i<<"] = ("<<A[i].u<<","<<A[i].v<<")");
 
-    /* util para encontrar (x0,·) 
-    auto posDummy=[&](int node){
-        for(size_t k=0;k<A.size();++k)
-            if(A[k].u==0 && A[k].v==node) return (int)k;
-        return -1;
-    };
-    */
     DBG("T0 creado con " << A.size() << " aristas y closure=" 
         << closure(A,N));
+
 /* ===========  BUCLE PRINCIPAL L-G — cierre máximo  =========== */
     while (true)
     {
@@ -579,9 +598,14 @@ int main(int argc,char*argv[]){
         /* 3) Busca el PRIMER arco del grafo (feas) que salga de Y hacia X\Y */
         int viol_u = -1, viol_v = -1;
         for (auto [u,v] : feas) {
-            if (inY[u] && !inY[v] && !procesadas.count(arcKey(u,v))) {
-                viol_u = u; viol_v = v;
-                break;                                       // basta uno
+            if (inY[u] ^ inY[v]) { 
+                int inside  =  inY[u] ? u : v;
+                int outside =  inY[u] ? v : u;
+                uint64_t key = arcKey(min(inside,outside), max(inside,outside));
+                if (!procesadas.count(key)) {
+                    viol_u = inside; viol_v = outside;
+                    break;                                      // basta uno
+                }
             }
         }
 
@@ -598,7 +622,7 @@ int main(int argc,char*argv[]){
                 A, N, acc,
                 step, DETAILED_DEBUG_START_ITERATION,
                 procesadas);
-
+        
         /* 6) Estadística y control ---------------------------------- */
         if (step < DETAILED_DEBUG_START_ITERATION)
             std::cout << "T" << step << "  cierre = " << closure(A, N) << '\n';
